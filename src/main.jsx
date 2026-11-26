@@ -287,7 +287,7 @@ function Workshop() {
     function syncTimer() {
       window.clearInterval(timer)
       if (!document.hidden) {
-        timer = window.setInterval(() => setCurrent(index => (index + 1) % gallery.length), 5000)
+        timer = window.setInterval(() => setCurrent(index => (index + 1) % gallery.length), 1500)
       }
     }
 
