@@ -172,13 +172,10 @@ function Hero() {
 }
 
 function ManufacturerBand() {
-  const [paused, setPaused] = useState(false)
-  const action = paused ? 'Retomar carrossel de marcas' : 'Pausar carrossel de marcas'
-
   return (
-    <div className="manufacturer-band" data-paused={paused}>
+    <div className="manufacturer-band">
       <p id="manufacturer-title" className="eyebrow">Marcas atendidas</p>
-      <div className="brand-reel" id="manufacturer-reel">
+      <div className="brand-reel">
         <div className="brand-track">
           {[false, true].map(duplicate => (
             <ul key={String(duplicate)} className="brand-group" aria-hidden={duplicate || undefined} aria-labelledby={duplicate ? undefined : 'manufacturer-title'}>
@@ -191,9 +188,6 @@ function ManufacturerBand() {
           ))}
         </div>
       </div>
-      <button className="brand-toggle" type="button" aria-label={action} title={action} aria-controls="manufacturer-reel" onClick={() => setPaused(value => !value)}>
-        <Icon name={paused ? 'play' : 'pause'} />
-      </button>
     </div>
   )
 }
@@ -262,9 +256,51 @@ function Services() {
 
 function Workshop() {
   const [current, setCurrent] = useState(0)
-  const photo = gallery[current]
+  const [isPlaying, setIsPlaying] = useState(true)
+  const [isHovered, setIsHovered] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const frame = useRef(null)
+  const rotationLabel = isPlaying ? 'Pausar apresentação de fotos' : 'Retomar apresentação de fotos'
+  const autoAdvance = isPlaying && isVisible && !isHovered && !reducedMotion
+
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onPreferenceChange = event => setReducedMotion(event.matches)
+    preference.addEventListener?.('change', onPreferenceChange)
+
+    const observer = typeof IntersectionObserver === 'function'
+      ? new IntersectionObserver(([entry]) => setIsVisible(entry.intersectionRatio >= 0.35), { threshold: 0.35 })
+      : null
+    observer?.observe(frame.current)
+
+    return () => {
+      preference.removeEventListener?.('change', onPreferenceChange)
+      observer?.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!autoAdvance) return
+
+    let timer
+    function syncTimer() {
+      window.clearInterval(timer)
+      if (!document.hidden) {
+        timer = window.setInterval(() => setCurrent(index => (index + 1) % gallery.length), 5000)
+      }
+    }
+
+    syncTimer()
+    document.addEventListener('visibilitychange', syncTimer)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', syncTimer)
+    }
+  }, [autoAdvance])
 
   function advance(step) {
+    setIsPlaying(false)
     setCurrent(index => (index + step + gallery.length) % gallery.length)
   }
 
@@ -276,20 +312,51 @@ function Workshop() {
           <h2 id="workshop-title">O trabalho,<br /> de perto.</h2>
           <p>O dia a dia da CAT CNC, dos testes de bancada à intervenção na máquina.</p>
         </div>
-        <figure className="workshop-gallery">
-          <div className="gallery-frame" data-photo={current}>
-            <img key={photo.image} src={`${media}${photo.image}`} alt={photo.alt} loading="lazy" decoding="async" />
+        <figure
+          className="workshop-gallery"
+          onPointerEnter={event => { if (event.pointerType === 'mouse') setIsHovered(true) }}
+          onPointerLeave={() => setIsHovered(false)}
+          onFocus={event => { if (event.target.matches(':focus-visible')) setIsPlaying(false) }}
+        >
+          <div className="gallery-frame" id="workshop-slides" ref={frame}>
+            {gallery.map((photo, index) => (
+              <img
+                key={photo.image}
+                src={`${media}${photo.image}`}
+                alt={photo.alt}
+                className={current === index ? 'is-selected' : ''}
+                aria-hidden={current !== index}
+                loading="lazy"
+                decoding="async"
+              />
+            ))}
           </div>
           <figcaption className="gallery-caption">
-            <div className="gallery-status" aria-live="polite" aria-atomic="true">
+            <div className="gallery-status" aria-live={isPlaying && !reducedMotion ? 'off' : 'polite'} aria-atomic="true">
               <span className="gallery-count">
                 0{current + 1}<span> / 0{gallery.length}</span>
               </span>
-              <div><strong>{photo.title}</strong><p>{photo.text}</p></div>
+              <div className="gallery-description">
+                {gallery.map(({ title, text }, index) => (
+                  <div key={title} aria-hidden={current !== index}><strong>{title}</strong><p>{text}</p></div>
+                ))}
+              </div>
             </div>
             <div className="gallery-controls" role="group" aria-label="Controles da galeria">
-              <button type="button" onClick={() => advance(-1)}>Anterior</button>
-              <button type="button" onClick={() => advance(1)}>Próxima</button>
+              {!reducedMotion && (
+                <button className="gallery-playback" type="button" aria-label={rotationLabel} title={rotationLabel} aria-controls="workshop-slides" onClick={() => {
+                  setIsHovered(false)
+                  setIsPlaying(value => !value)
+                }}>
+                  <Icon name={isPlaying ? 'pause' : 'play'} />
+                </button>
+              )}
+              <button type="button" aria-label="Foto anterior" aria-controls="workshop-slides" onClick={() => advance(-1)}>
+                <Icon name="arrowLeft" />
+              </button>
+              <button type="button" aria-label="Próxima foto" aria-controls="workshop-slides" onClick={() => advance(1)}>
+                <Icon name="arrowRight" />
+              </button>
             </div>
           </figcaption>
         </figure>
